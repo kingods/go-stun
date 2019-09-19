@@ -23,8 +23,19 @@ import (
 	"github.com/ccding/go-stun/stun"
 )
 
+var (
+	STUN_ADDRS = []string{
+		"stun.ideasip.com:3478",
+		"stun.voiparound.com:3478",
+		"stun.voipbuster.com:3478",
+		"stun.voipstunt.com:3478",
+		"stun.voxgratia.org:3478",
+		"stun.ekiga.net:3478",
+	}
+)
+
 func main() {
-	var serverAddr = flag.String("s", stun.DefaultServerAddr, "STUN server address")
+	var serverAddr = flag.String("s", "", "STUN server address")
 	var v = flag.Bool("v", false, "verbose mode")
 	var vv = flag.Bool("vv", false, "double verbose mode (includes -v)")
 	var vvv = flag.Bool("vvv", false, "triple verbose mode (includes -v and -vv)")
@@ -35,7 +46,11 @@ func main() {
 	client := stun.NewClient()
 	// The default addr (stun.DefaultServerAddr) will be used unless we
 	// call SetServerAddr.
-	client.SetServerAddr(*serverAddr)
+	if len(*serverAddr) == 0 {
+		client.SetServerAddrs(STUN_ADDRS)
+	} else {
+		client.SetServerAddr(*serverAddr)
+	}
 	// Non verbose mode will be used by default unless we call
 	// SetVerbose(true) or SetVVerbose(true).
 	client.SetVerbose(*v || *vv || *vvv)

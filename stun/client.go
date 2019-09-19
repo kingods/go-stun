@@ -25,10 +25,11 @@ import (
 // Client is a STUN client, which can be set STUN server address and is used
 // to discover NAT type.
 type Client struct {
-	serverAddr   string
+	serverAddrs  []string
 	softwareName string
 	conn         net.PacketConn
 	logger       *Logger
+	index        int
 }
 
 // NewClient returns a client without network connection. The network
@@ -37,6 +38,7 @@ func NewClient() *Client {
 	c := new(Client)
 	c.SetSoftwareName(DefaultSoftwareName)
 	c.logger = NewLogger()
+	c.serverAddrs = make([]string, 0)
 	return c
 }
 
@@ -64,12 +66,17 @@ func (c *Client) SetVVerbose(v bool) {
 
 // SetServerHost allows user to set the STUN hostname and port.
 func (c *Client) SetServerHost(host string, port int) {
-	c.serverAddr = net.JoinHostPort(host, strconv.Itoa(port))
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	c.serverAddrs = append(c.serverAddrs, addr)
 }
 
 // SetServerAddr allows user to set the transport layer STUN server address.
-func (c *Client) SetServerAddr(address string) {
-	c.serverAddr = address
+func (c *Client) SetServerAddrs(addrs []string) {
+	c.serverAddrs = append(c.serverAddrs, addrs...)
+}
+
+func (c *Client) SetServerAddr(addr string) {
+	c.serverAddrs = append(c.serverAddrs, addr)
 }
 
 // SetSoftwareName allows user to set the name of the software, which is used
@@ -81,10 +88,30 @@ func (c *Client) SetSoftwareName(name string) {
 // Discover contacts the STUN server and gets the response of NAT type, host
 // for UDP punching.
 func (c *Client) Discover() (NATType, *Host, error) {
-	if c.serverAddr == "" {
-		c.SetServerAddr(DefaultServerAddr)
+	var t NATType
+	var err error
+	var host *Host
+	for i := 0; i < len(c.serverAddrs); i++ {
+		c.index = i
+		t, host, err = c._discover(i)
+		if err == nil && t != NATUnknown {
+			return t, host, err
+		}
 	}
-	serverUDPAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
+
+	return t, host, err
+}
+
+func (c *Client) _discover(index int) (NATType, *Host, error) {
+	if index > len(c.serverAddrs) {
+		return NATError, nil, errors.New("_discover: out of range")
+	}
+	if len(c.serverAddrs[index]) == 0 {
+		return NATError, nil, errors.New("_discover: host is nil")
+	}
+
+	serverAddr := c.serverAddrs[index]
+	serverUDPAddr, err := net.ResolveUDPAddr("udp", serverAddr)
 	if err != nil {
 		return NATError, nil, err
 	}
@@ -107,10 +134,12 @@ func (c *Client) Keepalive() (*Host, error) {
 	if c.conn == nil {
 		return nil, errors.New("no connection available")
 	}
-	if c.serverAddr == "" {
-		c.SetServerAddr(DefaultServerAddr)
-	}
-	serverUDPAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
+
+	//if len(c.serverAddrs) == 0 {
+	//	c.SetServerAddr(DefaultServerAddr)
+	//}
+
+	serverUDPAddr, err := net.ResolveUDPAddr("udp", c.serverAddrs[c.index])
 	if err != nil {
 		return nil, err
 	}
